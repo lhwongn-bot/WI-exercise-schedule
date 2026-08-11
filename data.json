@@ -8,15 +8,6 @@
       "pcaId": "p_msocunh27zhq3",
       "exerciseType": "PT",
       "createdAt": "2026-08-11T07:44:43.662Z"
-    },
-    {
-      "id": "c_msocw361l8uif",
-      "name": "y",
-      "status": "Active",
-      "notes": "",
-      "pcaId": "p_msocunh27zhq3",
-      "exerciseType": "PT",
-      "createdAt": "2026-08-11T07:45:56.233Z"
     }
   ],
   "pcas": [
@@ -40,5 +31,5 @@
       "c_msocuj66ypmxk"
     ]
   },
-  "exportedAt": "2026-08-11T07:54:26.663Z"
+  "exportedAt": "2026-08-11T07:54:33.318Z"
 }
