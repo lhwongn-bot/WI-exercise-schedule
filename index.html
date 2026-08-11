@@ -455,34 +455,38 @@
     }
 
     // ---------- Push (write) ----------
-    async function pushToGitHub(silent = false) {
+    async function pushToGitHub(silent = false, retryCount = 0) {
       const token = getToken();
       if (!token) {
         if (!silent) setSyncStatus('No token — open Token panel and paste the shared token', 'error');
         return false;
       }
-      if (isPushing) return false;
+      if (isPushing && retryCount === 0) return false;
       isPushing = true;
-      if (!silent) setSyncStatus('Saving to GitHub…', 'loading');
+      if (!silent) setSyncStatus(retryCount > 0 ? 'Conflict detected, retrying…' : 'Saving to GitHub…', 'loading');
+
+      const apiUrl = `https://api.github.com/repos/${GITHUB.owner}/${GITHUB.repo}/contents/${GITHUB.path}`;
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      };
 
       try {
-        // Always get the latest SHA right before writing (avoids most conflicts)
-        const apiUrl = `https://api.github.com/repos/${GITHUB.owner}/${GITHUB.repo}/contents/${GITHUB.path}`;
-        const getRes = await fetch(apiUrl + `?ref=${GITHUB.branch}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28'
-          }
+        // Always re-fetch the absolute latest SHA right before writing
+        let sha = null;
+        const getRes = await fetch(apiUrl + `?ref=${GITHUB.branch}&t=${Date.now()}`, {
+          headers,
+          cache: 'no-store'
         });
 
-        let sha = null;
         if (getRes.ok) {
           const file = await getRes.json();
           sha = file.sha;
           lastKnownSha = sha;
         } else if (getRes.status !== 404) {
-          throw new Error('Could not read current file from GitHub');
+          const errBody = await getRes.json().catch(() => ({}));
+          throw new Error(errBody.message || 'Could not read current file from GitHub');
         }
 
         const payload = {
@@ -504,25 +508,33 @@
         const putRes = await fetch(apiUrl, {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-            'X-GitHub-Api-Version': '2022-11-28'
+            ...headers,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(body)
         });
 
-        if (!putRes.ok) {
-          const err = await putRes.json().catch(() => ({}));
-          throw new Error(err.message || `Push failed (${putRes.status})`);
+        if (putRes.ok) {
+          const result = await putRes.json();
+          if (result.content && result.content.sha) lastKnownSha = result.content.sha;
+          const time = new Date().toLocaleTimeString('en-HK', { hour: '2-digit', minute: '2-digit' });
+          setSyncStatus(`✓ Saved to GitHub at ${time}`, 'success');
+          return true;
         }
 
-        const result = await putRes.json();
-        if (result.content && result.content.sha) lastKnownSha = result.content.sha;
+        // Handle conflict (409) — retry up to 2 times
+        const err = await putRes.json().catch(() => ({}));
+        const msg = err.message || `Push failed (${putRes.status})`;
 
-        const time = new Date().toLocaleTimeString('en-HK', { hour: '2-digit', minute: '2-digit' });
-        setSyncStatus(`✓ Saved to GitHub at ${time}`, 'success');
-        return true;
+        if (putRes.status === 409 && retryCount < 2) {
+          console.warn('SHA conflict, retrying…', msg);
+          // Short pause then retry with a fresh SHA
+          await new Promise(r => setTimeout(r, 400 + retryCount * 300));
+          isPushing = false;
+          return pushToGitHub(silent, retryCount + 1);
+        }
+
+        throw new Error(msg);
       } catch (err) {
         console.error(err);
         setSyncStatus('Save failed: ' + (err.message || 'unknown error'), 'error');
@@ -532,13 +544,13 @@
       }
     }
 
-    // Debounced auto-save (waits 1.5 s after last change)
+    // Debounced auto-save (waits 2 s after last change to reduce conflicts)
     function scheduleAutoPush() {
       if (!getToken()) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
         pushToGitHub(true);
-      }, 1500);
+      }, 2000);
     }
 
     // Full manual sync = pull then (if token) also push current state
