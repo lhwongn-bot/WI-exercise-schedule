@@ -1,15 +1,6 @@
 {
   "clients": [
     {
-      "id": "c_msocngovdvbgw",
-      "name": "123",
-      "status": "Active",
-      "notes": "",
-      "pcaId": "",
-      "exerciseType": "PT",
-      "createdAt": "2026-08-11T07:39:13.855Z"
-    },
-    {
       "id": "c_msocuj66ypmxk",
       "name": "nick wong",
       "status": "Active",
@@ -36,5 +27,5 @@
     "16:00"
   ],
   "schedule": {},
-  "exportedAt": "2026-08-11T07:45:09.466Z"
+  "exportedAt": "2026-08-11T07:45:51.123Z"
 }
